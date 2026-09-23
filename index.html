@@ -756,10 +756,25 @@ function aplicarOpRaw(raw, op){
   raw.envios.push([op.id, op.fecha, op.responsable, op.observaciones||'', op.codigo||'']);
 }
 
+/* Normaliza cualquier fecha que llegue de Sheets a 'AAAA-MM-DD' */
+const MESES_EN = {Jan:1,Feb:2,Mar:3,Apr:4,May:5,Jun:6,Jul:7,Aug:8,Sep:9,Oct:10,Nov:11,Dec:12};
+function normalizarFecha(v){
+  if(v==null || v==='') return '';
+  const s = String(v).trim();
+  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);                       // 2026-09-22
+  if(m) return `${m[1]}-${m[2]}-${m[3]}`;
+  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);                     // 22/09/2026
+  if(m) return `${m[3]}-${pad2(m[2])}-${pad2(m[1])}`;
+  m = s.match(/^[A-Za-z]{3},? ([A-Za-z]{3}) (\d{1,2}),? (\d{4})/);      // Tue Sep 22 2026 00:00:00 GMT-0500
+  if(m && MESES_EN[m[1]]) return `${m[3]}-${pad2(MESES_EN[m[1]])}-${pad2(m[2])}`;
+  const d = new Date(s);
+  return isNaN(d) ? '' : `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
+}
 function procesarDatos(rawServidor){
   // registros: [id, fecha(yyyy-mm-dd), responsable, sector, parcela, cama, cm, ml, ph, ce]
   // envios:    [id, fecha, responsable, observaciones]
-  const raw = { registros:[...(rawServidor.registros||[])], envios:[...(rawServidor.envios||[])] };
+  const raw = { registros:(rawServidor.registros||[]).map(r => { const x=[...r]; x[1]=normalizarFecha(x[1]); return x; }),
+                envios:(rawServidor.envios||[]).map(e => { const x=[...e]; x[1]=normalizarFecha(x[1]); return x; }) };
   const pendIds = new Set();
   store.get(LS_PEND, []).forEach(op => { aplicarOpRaw(raw, { accion:'guardar', ...op }); if(op.accion!=='eliminar') pendIds.add(op.id); });
   const mapEnv = {};
