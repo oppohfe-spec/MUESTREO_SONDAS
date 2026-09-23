@@ -1,0 +1,1210 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#123a7a">
+<title>Muestreo de Sondas · Riego</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root{
+    color-scheme: light;
+    --azul:#123a7a; --azul-2:#1e5bb8; --azul-claro:#e8f0fb;
+    --bg:#f3f6fa; --card:#fff; --txt:#1b2533; --muted:#667085; --borde:#d6dde8;
+    --ok:#15803d; --ok-bg:#e7f6ec; --warn:#b45309; --warn-bg:#fff4e0; --err:#b42318; --err-bg:#fdecea;
+    --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; --lim:#8a8984;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--txt);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;font-size:16px}
+  header{background:var(--azul);color:#fff;padding:12px 16px 0;position:sticky;top:0;z-index:20;box-shadow:0 2px 6px rgba(0,0,0,.15)}
+  header .top{max-width:1100px;margin:0 auto;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+  header h1{margin:0;font-size:18px;letter-spacing:.3px}
+  header small{opacity:.8;font-size:12px}
+  nav.tabs{max-width:1100px;margin:10px auto 0;display:flex;gap:4px}
+  nav.tabs button{flex:1;background:transparent;color:rgba(255,255,255,.75);border-radius:10px 10px 0 0;padding:10px 6px;font-size:15px;border-bottom:3px solid transparent}
+  nav.tabs button.act{color:#fff;background:rgba(255,255,255,.12);border-bottom-color:#7dd3fc}
+  .progress{height:4px;background:rgba(255,255,255,.2);overflow:hidden;margin:0 -16px}
+  .progress>div{height:100%;background:#7dd3fc;width:0;transition:width .25s}
+  main{max-width:760px;margin:0 auto;padding:14px 12px 150px}
+  main.wide{max-width:1100px;padding-bottom:40px}
+  .view{display:none}.view.act{display:block}
+  .card{background:var(--card);border:1px solid var(--borde);border-radius:12px;padding:14px;margin-bottom:12px}
+  .card h3{margin:0 0 10px;font-size:15px;color:var(--azul)}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  @media(max-width:420px){.grid2{grid-template-columns:1fr}}
+  label.f{display:block;font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:700}
+  input,select,textarea{width:100%;font:inherit;padding:10px 11px;border:1px solid var(--borde);border-radius:8px;background:#fff;color:var(--txt)}
+  input:focus,textarea:focus,select:focus{outline:2px solid var(--azul-2);outline-offset:0;border-color:var(--azul-2)}
+  textarea{min-height:70px;resize:vertical}
+
+  /* Registro */
+  .sector{background:var(--card);border:1px solid var(--borde);border-radius:12px;margin-bottom:10px;overflow:hidden}
+  .sector>summary{list-style:none;cursor:pointer;padding:13px 14px;display:flex;align-items:center;gap:10px;font-weight:700}
+  .sector>summary::-webkit-details-marker{display:none}
+  .sector>summary .nombre{font-size:17px;color:var(--azul)}
+  .sector>summary .cnt{margin-left:auto;font-size:13px;font-weight:600;color:var(--muted);background:var(--bg);padding:3px 9px;border-radius:20px}
+  .sector>summary .cnt.done{color:var(--ok);background:var(--ok-bg)}
+  .chev{transition:transform .2s;color:var(--muted);display:inline-block}
+  details[open]>summary .chev{transform:rotate(90deg)}
+  .sector[open]>summary{border-bottom:1px solid var(--borde)}
+  .parcela{padding:10px 12px 12px;border-bottom:1px dashed var(--borde)}
+  .parcela:last-child{border-bottom:0}
+  .ptitle{font-weight:700;font-size:14px;margin-bottom:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .tag{font-size:12px;font-weight:600;background:var(--azul-claro);color:var(--azul);padding:2px 8px;border-radius:6px}
+  .tag.pend{background:var(--warn-bg);color:var(--warn)}
+  .fila,.head{display:grid;grid-template-columns:54px 1fr 1fr 1fr;gap:6px;align-items:center}
+  .fila{margin-bottom:6px}
+  .fila .cm{font-weight:700;color:var(--azul);font-size:14px;text-align:center;background:var(--azul-claro);border-radius:6px;padding:9px 0}
+  .fila input{padding:9px 6px;text-align:center}
+  .fila input.bad{border-color:var(--err);background:var(--err-bg)}
+  .fila input.okv{border-color:#9bd3ae}
+  .head{font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;text-align:center;margin-bottom:4px}
+  .legend{font-size:12px;color:var(--muted);margin-top:6px}
+
+  .bar{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--borde);
+    padding:10px 12px calc(10px + env(safe-area-inset-bottom));z-index:30;box-shadow:0 -2px 8px rgba(0,0,0,.06)}
+  .bar .in{max-width:760px;margin:0 auto;display:flex;gap:10px;align-items:center}
+  .bar .info{font-size:13px;color:var(--muted);line-height:1.25}
+  .bar .info b{color:var(--txt);font-size:15px}
+  .bar .in.col{flex-direction:column;align-items:stretch;gap:8px}
+  .bar .in.col .info{text-align:center;font-size:12px}
+  .btns3{display:grid;grid-template-columns:1fr 1fr 1.5fr;gap:8px}
+  .btns3 button{padding:12px 8px;font-size:14px;line-height:1.15}
+  .btn-cancel{background:#eef1f5;color:#475467}
+  .btn-wa-sm{background:#25d366;color:#fff}
+  .btn-wa-sm:disabled{opacity:.5;cursor:not-allowed}
+  .editb{display:none;background:#fff4e0;color:#8a4b00;border:1px solid #f5cf8f;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:14px}
+  .editb.show{display:block}
+  .hacc{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+  .hacc button{flex:1 1 120px}
+  .btn-del{background:var(--err-bg);color:var(--err)}
+  .btn-pdf{background:#fff;color:var(--azul);border:1.5px solid var(--azul)}
+  .btn-pdf:disabled{opacity:.6}
+  button{font:inherit;font-weight:700;border:0;border-radius:10px;padding:12px 16px;cursor:pointer}
+  .btn{background:var(--azul);color:#fff}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  .btn-sec{background:var(--azul-claro);color:var(--azul)}
+  .btn-wa{background:#25d366;color:#fff;width:100%;font-size:17px;padding:15px}
+  .btn-sm{padding:7px 12px;font-size:14px;border-radius:8px}
+  .btn-ghost{background:transparent;color:var(--muted);padding:8px 10px;font-weight:600}
+  .ml-auto{margin-left:auto}
+
+  .modal{position:fixed;inset:0;background:rgba(10,20,40,.55);display:none;align-items:flex-end;justify-content:center;z-index:50}
+  .modal.show{display:flex}
+  .sheet{background:#fff;width:100%;max-width:760px;max-height:92vh;overflow:auto;border-radius:16px 16px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom))}
+  @media(min-width:700px){.modal{align-items:center}.sheet{border-radius:16px}}
+  .sheet h2{margin:0 0 10px;font-size:19px;color:var(--azul)}
+  pre.resumen{white-space:pre-wrap;background:var(--bg);border:1px solid var(--borde);border-radius:10px;padding:12px;font-size:13px;line-height:1.45;max-height:45vh;overflow:auto;font-family:ui-monospace,Menlo,Consolas,monospace}
+  .alert{padding:10px 12px;border-radius:10px;font-size:14px;margin:8px 0}
+  .alert.warn{background:var(--warn-bg);color:var(--warn)}
+  .alert.err{background:var(--err-bg);color:var(--err)}
+  .alert.ok{background:var(--ok-bg);color:var(--ok)}
+  .alert.info{background:var(--azul-claro);color:var(--azul)}
+  .row-btns{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap}
+  .row-btns button{flex:1}
+  .pend{display:none;font-size:13px;background:var(--warn-bg);color:var(--warn);padding:8px 12px;border-radius:10px;margin-bottom:12px;align-items:center;gap:8px}
+  .pend.show{display:flex}
+  .spinner{width:18px;height:18px;border:3px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;display:inline-block;vertical-align:-3px;animation:sp 1s linear infinite;margin-right:6px}
+  @keyframes sp{to{transform:rotate(360deg)}}
+
+  /* Dashboard */
+  .filtros{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;align-items:end}
+  @media(max-width:900px){.filtros{grid-template-columns:repeat(3,1fr)}}
+  .filtros.f4{grid-template-columns:repeat(4,1fr)}
+  @media(max-width:520px){.filtros,.filtros.f4{grid-template-columns:1fr 1fr}}
+  .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px}
+  .toolbar .meta{font-size:12px;color:var(--muted)}
+  .chips{display:inline-flex;background:var(--bg);border:1px solid var(--borde);border-radius:10px;padding:3px;gap:2px}
+  .chips button{background:transparent;color:var(--muted);padding:7px 14px;font-size:14px;border-radius:8px}
+  .chips button.act{background:#fff;color:var(--azul);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+  .kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:12px}
+  @media(max-width:900px){.kpis{grid-template-columns:repeat(3,1fr)}}
+  @media(max-width:420px){.kpis{grid-template-columns:repeat(2,1fr)}}
+  .kpi{background:var(--card);border:1px solid var(--borde);border-radius:12px;padding:12px}
+  .kpi .l{font-size:12px;color:var(--muted);font-weight:700}
+  .kpi .v{font-size:24px;font-weight:800;margin-top:4px;color:var(--txt);font-variant-numeric:tabular-nums}
+  .kpi .s{font-size:12px;color:var(--muted);margin-top:2px}
+  .kpi .v.bad{color:var(--err)}
+  .charts{display:grid;grid-template-columns:3fr 2fr;gap:12px}
+  @media(max-width:900px){.charts{grid-template-columns:1fr}}
+  .charts>*,.filtros>*,.kpis>*{min-width:0}
+  .filtros input,.filtros select{min-width:0;max-width:100%}
+  .chart-box{position:relative;height:280px}
+  .sub{font-size:12px;color:var(--muted);margin:-6px 0 10px}
+  .tbl-wrap{overflow-x:auto}
+  table.t{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+  table.t th{background:var(--bg);color:var(--muted);font-weight:700;text-align:left;padding:8px;border-bottom:1px solid var(--borde);white-space:nowrap}
+  table.t td{padding:7px 8px;border-bottom:1px solid #edf0f5;white-space:nowrap}
+  table.t td.n,table.t th.n{text-align:center}
+  table.t td.sec{font-weight:800;color:var(--azul)}
+  td.c-ok{background:var(--ok-bg);color:var(--ok);font-weight:700}
+  td.c-bad{background:var(--err-bg);color:var(--err);font-weight:700}
+  td.c-na{color:#b0b7c3}
+  .vacio{text-align:center;color:var(--muted);padding:30px 10px;font-size:14px}
+  .alist{list-style:none;margin:0;padding:0;font-size:13px;max-height:280px;overflow:auto}
+  .alist li{padding:7px 0;border-bottom:1px solid #edf0f5;display:flex;gap:8px}
+  .alist li b{color:var(--err)}
+  .alist .when{color:var(--muted);margin-left:auto;white-space:nowrap}
+
+  /* Historial */
+  .hitem{background:var(--card);border:1px solid var(--borde);border-radius:12px;margin-bottom:8px;overflow:hidden}
+  .hitem>summary{list-style:none;cursor:pointer;padding:12px 14px;display:grid;grid-template-columns:auto 1fr auto;gap:4px 12px;align-items:center}
+  .hitem>summary::-webkit-details-marker{display:none}
+  .hitem .fch{font-weight:800;color:var(--azul);font-size:15px}
+  .hitem .who{font-size:13px;color:var(--muted)}
+  .hitem .vals{font-size:13px;grid-column:2/4;color:var(--txt)}
+  .badge{font-size:12px;font-weight:700;padding:3px 8px;border-radius:20px;white-space:nowrap}
+  .badge.ok{background:var(--ok-bg);color:var(--ok)}
+  .badge.bad{background:var(--err-bg);color:var(--err)}
+  .hbody{padding:0 14px 14px;border-top:1px solid var(--borde)}
+  .hbody .obs{font-size:13px;background:var(--bg);border-radius:8px;padding:8px 10px;margin:10px 0}
+  .demo{background:#fff7d6;color:#7a5b00;border:1px solid #f2dd8a}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="top">
+    <h1>Muestreo de Sondas</h1>
+    <small>Riego · HFE Berries Olmos</small>
+  </div>
+  <nav class="tabs">
+    <button data-tab="registro" class="act">Registro</button>
+    <button data-tab="dashboard">Dashboard</button>
+    <button data-tab="historial">Historial</button>
+  </nav>
+  <div class="progress" id="progBar"><div id="progFill"></div></div>
+</header>
+
+<main id="main">
+
+<!-- ===================== REGISTRO ===================== -->
+<section class="view act" id="v-registro">
+  <div class="editb" id="editBanner"><span>✏️ <b id="editTxt"></b></span></div>
+  <div class="pend" id="pendBox">
+    <span id="pendTxt"></span>
+    <button class="btn-sec btn-sm ml-auto" onclick="reintentarPendientes(true)">Reintentar</button>
+  </div>
+  <section class="card">
+    <div class="grid2">
+      <div>
+        <label class="f" for="fecha">Fecha</label>
+        <input type="date" id="fecha">
+      </div>
+      <div>
+        <label class="f" for="responsable">Responsable</label>
+        <input type="text" id="responsable" placeholder="Nombre y apellido" autocomplete="name">
+      </div>
+    </div>
+    <div class="legend" id="semTxt"></div>
+    <div class="legend" id="leyenda"></div>
+  </section>
+  <div id="sectores"></div>
+  <section class="card">
+    <label class="f" for="obs">Observaciones generales</label>
+    <textarea id="obs" placeholder="Sondas sin muestra, sondas dañadas, incidencias…"></textarea>
+  </section>
+</section>
+
+<!-- ===================== DASHBOARD ===================== -->
+<section class="view" id="v-dashboard">
+  <div class="alert demo" id="demoBanner" style="display:none">Datos de demostración: configura <b>GAS_URL</b> para ver los datos reales de Sheets.</div>
+  <section class="card">
+    <div class="filtros">
+      <div><label class="f" for="fTemp">Temporada</label><select id="fTemp"></select></div>
+      <div><label class="f" for="fSem">Semana</label><select id="fSem"></select></div>
+      <div><label class="f" for="fDesde">Fecha desde</label><input type="date" id="fDesde"></div>
+      <div><label class="f" for="fHasta">Fecha hasta</label><input type="date" id="fHasta"></div>
+      <div><label class="f" for="fSector">Sector</label><select id="fSector"></select></div>
+    </div>
+    <div class="toolbar">
+      <div class="chips" id="metricChips">
+        <button data-m="ph" class="act">pH</button>
+        <button data-m="ce">CE</button>
+        <button data-m="ml">ml</button>
+      </div>
+      <button class="btn-ghost btn-sm" onclick="limpiarFiltros()">Limpiar filtros</button>
+      <span class="meta ml-auto" id="dataMeta"></span>
+      <button class="btn-sec btn-sm" onclick="cargarDatos(true)">Actualizar</button>
+    </div>
+  </section>
+
+  <div class="kpis" id="kpis"></div>
+
+  <div class="charts">
+    <section class="card">
+      <h3 id="tTrend">Tendencia semanal</h3>
+      <div class="sub">Promedio por semana y profundidad. Línea gris = límite de referencia.</div>
+      <div class="chart-box"><canvas id="chTrend" aria-label="Tendencia semanal"></canvas></div>
+    </section>
+    <section class="card">
+      <h3 id="tSector">Promedio por sector</h3>
+      <div class="sub">Periodo filtrado</div>
+      <div class="chart-box"><canvas id="chSector" aria-label="Promedio por sector"></canvas></div>
+    </section>
+  </div>
+
+  <div class="charts">
+    <section class="card">
+      <h3 id="tMatriz">Parcela × profundidad</h3>
+      <div class="sub">Promedio del periodo · ✓ dentro de rango · ! fuera de rango</div>
+      <div class="tbl-wrap" id="matriz"></div>
+    </section>
+    <section class="card">
+      <h3>Alertas del periodo</h3>
+      <div class="sub" id="alertSub"></div>
+      <ul class="alist" id="alertas"></ul>
+    </section>
+  </div>
+</section>
+
+<!-- ===================== HISTORIAL ===================== -->
+<section class="view" id="v-historial">
+  <section class="card">
+    <div class="filtros">
+      <div><label class="f" for="hTemp">Temporada</label><select id="hTemp"></select></div>
+      <div><label class="f" for="hSem">Semana</label><select id="hSem"></select></div>
+      <div><label class="f" for="hDesde">Fecha desde</label><input type="date" id="hDesde"></div>
+      <div><label class="f" for="hHasta">Fecha hasta</label><input type="date" id="hHasta"></div>
+      <div><label class="f" for="hSector">Sector (detalle)</label><select id="hSector"></select></div>
+    </div>
+    <div class="toolbar">
+      <span class="meta" id="hMeta"></span>
+      <button class="btn-sec btn-sm ml-auto" onclick="exportarCSV()">Exportar CSV</button>
+      <button class="btn-sec btn-sm" onclick="cargarDatos(true)">Actualizar</button>
+    </div>
+  </section>
+  <div id="hLista"></div>
+</section>
+
+</main>
+
+<div class="bar" id="barRegistro">
+  <div class="in col">
+    <div class="info"><b id="cntTxt">0 / 0</b> puntos registrados</div>
+    <div class="btns3">
+      <button class="btn-cancel" id="btnCancelar" onclick="cancelar()">Cancelar</button>
+      <button class="btn" id="btnRegistrar" onclick="abrirRevision('registrar')">Registrar</button>
+      <button class="btn-wa-sm" id="btnRegWa" onclick="abrirRevision('whatsapp')">Registrar y enviar WhatsApp</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="mRevision">
+  <div class="sheet">
+    <h2 id="revTitulo">Revisar registro</h2>
+    <div id="revAlertas"></div>
+    <pre class="resumen" id="revTexto"></pre>
+    <div class="row-btns">
+      <button class="btn-sec" onclick="cerrar('mRevision')">Volver</button>
+      <button class="btn" id="btnEnviar" onclick="enviar()">Registrar</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="mOk">
+  <div class="sheet">
+    <h2 id="okTitulo">Registro guardado</h2>
+    <div id="okMsg"></div>
+    <p style="font-size:14px;color:var(--muted);margin:10px 0" id="okWaTxt"></p>
+    <button class="btn-wa" onclick="abrirWhatsApp(registroActual)">Enviar resumen por WhatsApp</button>
+    <div class="row-btns">
+      <button class="btn-sec" onclick="copiarResumen(registroActual)">Copiar resumen</button>
+      <button class="btn" onclick="nuevoRegistro()">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =====================================================================
+   CONFIGURACIÓN — editar aquí
+   ===================================================================== */
+const CONFIG = {
+  // URL de la implementación del Apps Script (termina en /exec)
+  GAS_URL: 'https://script.google.com/macros/s/AKfycbzrqMTwCBksKDbBZ-ZpYdiWoruHh0GxTJ4ROkunfzluTvOT-xS6-XgQkKORqC0tyhayCg/exec',
+  // WhatsApp destino con código de país, sin "+" (ej. 51987654321). "" = elegir chat/grupo al enviar.
+  WA_NUMERO: '',
+  // Rangos de referencia (alertas visuales, resumen y dashboard)
+  PH_MIN: 4.5, PH_MAX: 6.0,
+  CE_MAX: 1.5,        // dS/m
+  ML_MIN: 1,          // menos de esto = sonda sin muestra
+  // Temporada: inicia en la semana 27 y termina en la semana 26 del año siguiente (ej. T2627)
+  SEMANA_INICIO_TEMPORADA: 27
+};
+
+/* Puntos de muestreo (según formato físico SONDAS) */
+const SECTORES = [
+  { sector:'O1E1', parcelas:[
+    { parcela:'4.3', cama:'83', prof:[15,20,40] },
+    { parcela:'3.5', cama:'',   prof:[15] },
+    { parcela:'4.5', cama:'33', prof:[10,20,40] } ]},
+  { sector:'O1E2', parcelas:[
+    { parcela:'2.1', cama:'33', prof:[15,20,40] },
+    { parcela:'3.5', cama:'55', prof:[15,20,40] } ]},
+  { sector:'O2E1', parcelas:[
+    { parcela:'1.3', cama:'55', prof:[15,20,40] },
+    { parcela:'3.3', cama:'43', prof:[15,20,40] },
+    { parcela:'5.1', cama:'58', prof:[15,20,40] } ]},
+  { sector:'O2E2', parcelas:[
+    { parcela:'1.4', cama:'53', prof:[15,20,40] },
+    { parcela:'4.1', cama:'',   prof:[15] },
+    { parcela:'2.2', cama:'52', prof:[15,20,40] },
+    { parcela:'5.5', cama:'53', prof:[15,20,40] } ]},
+  { sector:'O3E1', parcelas:[
+    { parcela:'1.1 (macetas)', cama:'41', prof:[15] },
+    { parcela:'2.3 (macetas)', cama:'',   prof:[15] },
+    { parcela:'3.4', cama:'73', prof:[15,20,40] },
+    { parcela:'4.4', cama:'72', prof:[15,20,40] } ]},
+  { sector:'O3E2', parcelas:[
+    { parcela:'3.2 RV_T1',  cama:'',   prof:[15] },
+    { parcela:'3.5 RV_T1',  cama:'61', prof:[15] },
+    { parcela:'3.5 RV_T2',  cama:'10', prof:[15] },
+    { parcela:'3.11 RV_T3', cama:'32', prof:[10] } ]},
+  { sector:'JV', parcelas:[
+    { parcela:'Manila',           cama:'6.7 V2', prof:[15] },
+    { parcela:'Madeira',          cama:'6.7 V3', prof:[15] },
+    { parcela:'Fall Creek17-132', cama:'6.7 V1', prof:[15] },
+    { parcela:'Fall Creek14-057', cama:'6.7 V4', prof:[15] },
+    { parcela:'HB-161',           cama:'6.7 V6', prof:[15] } ]}
+];
+
+/* =====================================================================
+   Utilidades
+   ===================================================================== */
+const $ = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+const LS_DRAFT='sondas_borrador_v1', LS_PEND='sondas_pendientes_v1', LS_RESP='sondas_responsable', LS_CACHE='sondas_cache_v1';
+const store = {
+  get(k,d){ try{ const v=localStorage.getItem(k); return v?JSON.parse(v):d; }catch(e){ return d; } },
+  set(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} },
+  del(k){ try{ localStorage.removeItem(k); }catch(e){} }
+};
+const pad2 = n => String(n).padStart(2,'0');
+const hoyISO = () => { const d=new Date(); return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`; };
+const fmtFecha = iso => { if(!iso) return ''; const [y,m,d]=iso.split('-'); return `${d}/${m}/${y}`; };
+const num = v => { if(v===''||v==null) return null; const n=parseFloat(String(v).replace(',','.')); return isNaN(n)?null:n; };
+const r2 = n => n==null ? '–' : (Math.round(n*100)/100).toString();
+const prom = arr => { const a=arr.filter(x=>x!=null); return a.length ? a.reduce((s,x)=>s+x,0)/a.length : null; };
+const uid = () => 'S'+Date.now().toString(36).toUpperCase()+Math.random().toString(36).slice(2,6).toUpperCase();
+const esc = s => String(s??'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const tieneDato = d => d.ml!=null || d.ph!=null || d.ce!=null;
+const esDemo = () => !CONFIG.GAS_URL || CONFIG.GAS_URL.includes('PEGAR_AQUI');
+
+/* Semana ISO y temporada */
+function semanaISO(iso){
+  const [y,m,d] = iso.split('-').map(Number);
+  const t = new Date(Date.UTC(y,m-1,d));
+  const dia = t.getUTCDay() || 7;
+  t.setUTCDate(t.getUTCDate()+4-dia);
+  const anio = t.getUTCFullYear();
+  const sem = Math.ceil(((t - Date.UTC(anio,0,1))/864e5 + 1)/7);
+  return { anio, sem };
+}
+function temporadaDe(anio, sem){
+  const ini = sem >= CONFIG.SEMANA_INICIO_TEMPORADA ? anio : anio-1;
+  return 'T' + pad2(ini%100) + pad2((ini+1)%100);
+}
+function infoFecha(iso){
+  const {anio, sem} = semanaISO(iso);
+  return { anio, sem, key: anio*100+sem, temp: temporadaDe(anio, sem) };
+}
+
+/* Lista plana de puntos */
+const PUNTOS = [];
+SECTORES.forEach(s => s.parcelas.forEach((p,pi) => p.prof.forEach(cm =>
+  PUNTOS.push({ key:`${s.sector}|${pi}|${cm}`, sector:s.sector, parcela:p.parcela, cama:p.cama, cm }))));
+
+/* Rango: devuelve true si el valor está fuera de referencia */
+function fueraRango(met, v){
+  if(v==null) return false;
+  if(met==='ph') return v<CONFIG.PH_MIN || v>CONFIG.PH_MAX;
+  if(met==='ce') return v>CONFIG.CE_MAX || v<0;
+  if(met==='ml') return v<CONFIG.ML_MIN;
+  return false;
+}
+const filaFuera = r => fueraRango('ph',r.ph) || fueraRango('ce',r.ce) || (r.ml!=null && r.ml<CONFIG.ML_MIN);
+
+/* =====================================================================
+   Pestañas
+   ===================================================================== */
+function irA(tab){
+  $$('nav.tabs button').forEach(b => b.classList.toggle('act', b.dataset.tab===tab));
+  $$('.view').forEach(v => v.classList.toggle('act', v.id==='v-'+tab));
+  const reg = tab==='registro';
+  $('#barRegistro').style.display = reg ? '' : 'none';
+  $('#progBar').style.visibility = reg ? 'visible' : 'hidden';
+  $('#main').classList.toggle('wide', !reg);
+  if(!reg){ if(!DATA.cargado) cargarDatos(false); else if(tab==='dashboard') renderDashboard(); else renderHistorial(); }
+  window.scrollTo({top:0});
+}
+$$('nav.tabs button').forEach(b => b.addEventListener('click', () => irA(b.dataset.tab)));
+
+/* =====================================================================
+   REGISTRO
+   ===================================================================== */
+function renderFormulario(){
+  $('#leyenda').textContent = `Referencia: pH ${CONFIG.PH_MIN}–${CONFIG.PH_MAX} · CE ≤ ${CONFIG.CE_MAX} dS/m. Valores fuera de rango se marcan en rojo.`;
+  const cont = $('#sectores');
+  cont.innerHTML = SECTORES.map((s,si) => `
+    <details class="sector" ${si===0?'open':''}>
+      <summary><span class="chev">▶</span><span class="nombre">${s.sector}</span><span class="cnt" data-cnt="${s.sector}">0/0</span></summary>
+      ${s.parcelas.map((p,pi) => `
+        <div class="parcela">
+          <div class="ptitle">Parcela ${esc(p.parcela)} ${p.cama?`<span class="tag">Cama ${esc(p.cama)}</span>`:''}</div>
+          <div class="head"><span>cm</span><span>ml</span><span>pH</span><span>CE</span></div>
+          ${p.prof.map(cm => { const k=`${s.sector}|${pi}|${cm}`; return `
+            <div class="fila">
+              <div class="cm">${cm}</div>
+              <input data-k="${k}" data-f="ml" inputmode="decimal" placeholder="ml" aria-label="${s.sector} ${esc(p.parcela)} ${cm}cm ml">
+              <input data-k="${k}" data-f="ph" inputmode="decimal" placeholder="pH" aria-label="${s.sector} ${esc(p.parcela)} ${cm}cm pH">
+              <input data-k="${k}" data-f="ce" inputmode="decimal" placeholder="CE" aria-label="${s.sector} ${esc(p.parcela)} ${cm}cm CE">
+            </div>`; }).join('')}
+        </div>`).join('')}
+    </details>`).join('');
+  cont.addEventListener('input', e => { if(e.target.dataset.k){ validarInput(e.target); guardarBorrador(); actualizarConteo(); } });
+  ['fecha','responsable','obs'].forEach(id => $('#'+id).addEventListener('input', guardarBorrador));
+  $('#fecha').addEventListener('input', mostrarSemana);
+  $('#responsable').addEventListener('change', () => store.set(LS_RESP, $('#responsable').value.trim()));
+}
+function mostrarSemana(){
+  const f = $('#fecha').value;
+  if(!f){ $('#semTxt').textContent=''; return; }
+  const i = infoFecha(f);
+  $('#semTxt').innerHTML = `<b>Semana ${i.sem}</b> · Temporada <b>${i.temp}</b>`;
+}
+function validarInput(inp){
+  const v = num(inp.value);
+  inp.classList.remove('bad','okv');
+  if(inp.value.trim()==='') return;
+  const bad = v==null || fueraRango(inp.dataset.f, v) || v<0;
+  inp.classList.add(bad?'bad':'okv');
+}
+function leerDatos(){
+  const vals = {};
+  $$('input[data-k]').forEach(i => { (vals[i.dataset.k] ||= {})[i.dataset.f] = i.value.trim(); });
+  return PUNTOS.map(p => { const v=vals[p.key]||{}; return { ...p, ml:num(v.ml), ph:num(v.ph), ce:num(v.ce) }; });
+}
+function actualizarConteo(){
+  const datos = leerDatos(), total = datos.length, hechos = datos.filter(tieneDato).length;
+  $('#cntTxt').textContent = `${hechos} / ${total}`;
+  $('#progFill').style.width = (hechos/total*100)+'%';
+  SECTORES.forEach(s => {
+    const ds = datos.filter(d=>d.sector===s.sector), h = ds.filter(tieneDato).length;
+    const el = document.querySelector(`[data-cnt="${s.sector}"]`);
+    el.textContent = `${h}/${ds.length}`; el.classList.toggle('done', h===ds.length);
+  });
+}
+function guardarBorrador(){
+  if(typeof EDIT!=='undefined' && EDIT) return;
+  const vals = {};
+  $$('input[data-k]').forEach(i => { if(i.value) vals[i.dataset.k+'|'+i.dataset.f] = i.value; });
+  store.set(LS_DRAFT, { fecha:$('#fecha').value, responsable:$('#responsable').value, obs:$('#obs').value, vals });
+}
+function cargarBorrador(){
+  const b = store.get(LS_DRAFT, null);
+  $('#fecha').value = (b && b.fecha) || hoyISO();
+  $('#responsable').value = (b && b.responsable) || store.get(LS_RESP, '');
+  $('#obs').value = (b && b.obs) || '';
+  if(b && b.vals) $$('input[data-k]').forEach(i => { const v=b.vals[i.dataset.k+'|'+i.dataset.f]; if(v!=null){ i.value=v; validarInput(i); } });
+  mostrarSemana(); actualizarConteo();
+}
+function vaciarFormulario(){
+  $$('input[data-k]').forEach(i => { i.value=''; i.classList.remove('bad','okv'); });
+  $('#obs').value=''; $('#fecha').value=hoyISO(); mostrarSemana(); actualizarConteo();
+}
+function limpiarFormulario(){
+  if(!window.confirm('¿Borrar todos los valores ingresados?')) return;
+  vaciarFormulario(); store.del(LS_DRAFT);
+}
+
+/* ---------- Resumen WhatsApp ---------- */
+let registroActual = null;
+function construirRegistro(){
+  return {
+    id: uid(), fecha: $('#fecha').value, responsable: $('#responsable').value.trim(),
+    observaciones: $('#obs').value.trim(), enviadoEn: new Date().toISOString(),
+    dispositivo: navigator.userAgent.slice(0,120),
+    puntos: leerDatos().map(d => ({ sector:d.sector, parcela:d.parcela, cama:d.cama, cm:d.cm, ml:d.ml, ph:d.ph, ce:d.ce }))
+  };
+}
+function alertasDe(puntos){
+  const out = [];
+  puntos.forEach(p => {
+    if(!tieneDato(p)) return;
+    const lbl = `${p.sector} ${p.parcela}${p.cama?' C'+p.cama:''} ${p.cm}cm`;
+    if(p.ml!=null && p.ml<CONFIG.ML_MIN) out.push({p, t:`${lbl}: sin muestra (${r2(p.ml)} ml)`});
+    if(fueraRango('ph',p.ph)) out.push({p, t:`${lbl}: pH ${r2(p.ph)}`});
+    if(fueraRango('ce',p.ce)) out.push({p, t:`${lbl}: CE ${r2(p.ce)}`});
+  });
+  return out;
+}
+function textoResumen(reg){
+  const L = [], conDato = reg.puntos.filter(tieneDato), inf = infoFecha(reg.fecha);
+  L.push('*MUESTREO DE SONDAS – RIEGO*');
+  L.push(`📅 Fecha: ${fmtFecha(reg.fecha)} · Sem ${inf.sem} · ${inf.temp}`);
+  L.push(`👤 Responsable: ${reg.responsable || '—'}`);
+  L.push(`📍 Puntos registrados: ${conDato.length}/${reg.puntos.length}`);
+  L.push(`Promedio general → pH ${r2(prom(conDato.map(p=>p.ph)))} | CE ${r2(prom(conDato.map(p=>p.ce)))} | ml ${r2(prom(conDato.map(p=>p.ml)))}`);
+  L.push(''); L.push('*Promedios por sector*');
+  SECTORES.forEach(s => {
+    const ps = conDato.filter(p=>p.sector===s.sector);
+    L.push(ps.length ? `• ${s.sector}: pH ${r2(prom(ps.map(p=>p.ph)))} | CE ${r2(prom(ps.map(p=>p.ce)))} | ml ${r2(prom(ps.map(p=>p.ml)))}` : `• ${s.sector}: sin datos`);
+  });
+  const al = alertasDe(reg.puntos);
+  L.push('');
+  if(al.length){ L.push(`*⚠️ Alertas (${al.length})*`); al.forEach(a=>L.push('– '+a.t)); } else L.push('✅ Sin valores fuera de rango');
+  L.push(''); L.push('*Detalle* (cm: ml / pH / CE)');
+  SECTORES.forEach(s => {
+    L.push(`_${s.sector}_`);
+    s.parcelas.forEach(p => {
+      const ps = reg.puntos.filter(x=>x.sector===s.sector && String(x.parcela)===p.parcela && String(x.cama||'')===p.cama);
+      if(!ps.length) return;
+      L.push(`${p.parcela}${p.cama?' C'+p.cama:''} → ` + ps.map(x => tieneDato(x) ? `${x.cm}: ${r2(x.ml)}/${r2(x.ph)}/${r2(x.ce)}` : `${x.cm}: —`).join(' · '));
+    });
+  });
+  if(reg.observaciones){ L.push(''); L.push('📝 Obs: '+reg.observaciones); }
+  L.push(''); L.push(`Código: ${reg.codigo || 'pendiente de asignar'}`);
+  return L.join('\n');
+}
+
+/* ---------- Envío ---------- */
+let MODO = 'registrar';            // 'registrar' | 'whatsapp'
+let EDIT = null;                   // { id, pend } cuando se edita un registro del historial
+
+function abrirRevision(modo){
+  MODO = modo;
+  const reg = construirRegistro(), avisos = [];
+  if(EDIT) reg.id = EDIT.id;
+  if(!reg.fecha) avisos.push(['err','Ingresa la fecha.']);
+  if(!reg.responsable) avisos.push(['err','Ingresa el nombre del responsable.']);
+  const hechos = reg.puntos.filter(tieneDato).length;
+  if(hechos===0) avisos.push(['err','No hay ningún punto registrado.']);
+  else if(hechos<reg.puntos.length) avisos.push(['warn',`Faltan ${reg.puntos.length-hechos} puntos sin datos. Se guardarán vacíos.`]);
+  const nAl = alertasDe(reg.puntos).length;
+  if(nAl) avisos.push(['warn',`${nAl} valor(es) fuera de rango de referencia.`]);
+  if(EDIT) avisos.unshift(['info','Se reemplazará el registro existente en Sheets.']);
+  $('#revTitulo').textContent = EDIT ? 'Revisar cambios' : 'Revisar registro';
+  $('#revAlertas').innerHTML = avisos.map(([t,m])=>`<div class="alert ${t}">${m}</div>`).join('');
+  $('#revTexto').textContent = reg.fecha ? textoResumen(reg) : '';
+  const btn = $('#btnEnviar');
+  btn.className = modo==='whatsapp' ? 'btn-wa-sm' : 'btn';
+  btn.textContent = modo==='whatsapp' ? (EDIT?'Guardar y enviar WhatsApp':'Registrar y enviar WhatsApp') : (EDIT?'Guardar cambios':'Registrar');
+  btn.dataset.txt = btn.textContent;
+  btn.disabled = avisos.some(a=>a[0]==='err');
+  registroActual = reg;
+  $('#mRevision').classList.add('show');
+}
+function cerrar(id){ $('#'+id).classList.remove('show'); }
+
+async function postGAS(op){
+  if(esDemo()) throw new Error('GAS_URL no configurada');
+  const r = await fetch(CONFIG.GAS_URL, { method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body:JSON.stringify(op) });
+  const j = await r.json();
+  if(!j.ok) throw new Error(j.error || 'Error en el servidor');
+  return j;
+}
+
+/* Cola local de operaciones: guardar | actualizar | eliminar */
+function encolar(op){
+  let pend = store.get(LS_PEND, []);
+  const idx = pend.findIndex(p => p.id===op.id);
+  if(idx>=0){
+    const prev = pend[idx];
+    if((prev.accion||'guardar')==='guardar'){
+      // aún no subido: se modifica o se descarta localmente
+      if(op.accion==='eliminar') pend.splice(idx,1);
+      else pend[idx] = { ...op, accion:'guardar' };
+    } else pend[idx] = op;
+  } else pend.push(op);
+  store.set(LS_PEND, pend);
+}
+/* Ejecuta una operación: Sheets si hay conexión, si no queda en cola */
+async function ejecutarOp(op){
+  if(esDemo()){
+    if(op.accion!=='eliminar' && !op.codigo) op.codigo = codigoLocal(DATA.raw, op.fecha);
+    aplicarOpRaw(DATA.raw, op); return { estado:'demo', j:{ codigo:op.codigo } };
+  }
+  const enCola = store.get(LS_PEND, []).find(p => p.id===op.id && (p.accion||'guardar')==='guardar');
+  if(enCola){ encolar(op); return { estado:'cola', msg:'registro aún no subido' }; }
+  try{
+    const j = await postGAS(op);
+    if(j.codigo) op.codigo = j.codigo;
+    if(DATA.raw){ aplicarOpRaw(DATA.raw, op); if(DATA.fuente!=='demo') store.set(LS_CACHE, { raw:DATA.raw, ts:Date.now() }); }
+    return { estado:'ok', j };
+  }catch(err){
+    encolar(op); return { estado:'cola', msg: err.message };
+  }
+}
+
+async function enviar(){
+  const btn = $('#btnEnviar');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Guardando…';
+  const reg = { ...registroActual, accion: EDIT ? 'actualizar' : 'guardar', codigo: EDIT ? EDIT.codigo : '' };
+  const res = await ejecutarOp(reg);
+  btn.disabled = false; btn.textContent = btn.dataset.txt;
+  cerrar('mRevision');
+  const eraEdicion = !!EDIT;
+  const msg = {
+    ok:   `<div class="alert ok">${eraEdicion?'Cambios guardados':'Guardado'} en Google Sheets.<br>Código: <b>${esc(reg.codigo)}</b></div>`,
+    demo: `<div class="alert warn">Modo demostración (código ${esc(reg.codigo)}): configura GAS_URL para guardar en Sheets.</div>`,
+    cola: `<div class="alert warn">No se pudo conectar con Sheets (${esc(res.msg||'')}). Quedó guardado en este equipo y se subirá automáticamente cuando haya conexión.</div>`
+  }[res.estado];
+  terminarEdicion(false);
+  vaciarFormulario();
+  if(eraEdicion) cargarBorrador(); else store.del(LS_DRAFT);   // tras editar se recupera el borrador que había
+  if(DATA.raw) procesarDatos(DATA.raw);
+  actualizarPendientes();
+  registroActual = reg;
+  if(MODO==='whatsapp'){ abrirWhatsApp(reg); }
+  $('#okTitulo').textContent = res.estado==='cola' ? 'Registro en cola' : (eraEdicion ? 'Cambios guardados' : 'Registro guardado');
+  $('#okMsg').innerHTML = msg;
+  $('#okWaTxt').textContent = MODO==='whatsapp' ? 'Si WhatsApp no se abrió, usa el botón:' : 'Puedes enviar el resumen por WhatsApp si lo necesitas.';
+  $('#mOk').classList.add('show');
+}
+function abrirWhatsApp(reg){
+  const txt = encodeURIComponent(textoResumen(reg));
+  window.location.href = `${CONFIG.WA_NUMERO ? 'https://wa.me/'+CONFIG.WA_NUMERO : 'https://wa.me/'}?text=${txt}`;
+}
+async function copiarResumen(reg){
+  try{ await navigator.clipboard.writeText(textoResumen(reg)); alert('Resumen copiado'); } catch(e){ alert('No se pudo copiar'); }
+}
+function nuevoRegistro(){ cerrar('mOk'); window.scrollTo({top:0,behavior:'smooth'}); }
+
+/* Botón Cancelar */
+function cancelar(){
+  if(EDIT){
+    if(!window.confirm('¿Descartar los cambios de este registro?')) return;
+    terminarEdicion(true); return;
+  }
+  if(!leerDatos().some(tieneDato) && !$('#obs').value){ vaciarFormulario(); return; }
+  if(!window.confirm('¿Cancelar el registro y borrar todos los valores ingresados?')) return;
+  vaciarFormulario(); store.del(LS_DRAFT);
+}
+
+/* ---------- Edición desde el historial ---------- */
+function editarEnvio(e){
+  if(!EDIT && leerDatos().some(tieneDato) && !window.confirm('El formulario tiene datos sin registrar. ¿Reemplazarlos por el registro a editar? (se conservan como borrador)')) return;
+  if(!EDIT) guardarBorrador();
+  EDIT = { id:e.id, pend:e.pend, codigo:e.codigo||'' };
+  $$('input[data-k]').forEach(i => { i.value=''; i.classList.remove('bad','okv'); });
+  $('#fecha').value = e.fecha; $('#responsable').value = e.responsable; $('#obs').value = e.observaciones || '';
+  SECTORES.forEach(s => s.parcelas.forEach((p,pi) => p.prof.forEach(cm => {
+    const pt = e.puntos.find(x => x.sector===s.sector && String(x.parcela)===p.parcela && String(x.cama||'')===p.cama && Number(x.cm)===cm);
+    if(!pt) return;
+    ['ml','ph','ce'].forEach(f => { const inp = document.querySelector(`input[data-k="${s.sector}|${pi}|${cm}"][data-f="${f}"]`); if(inp && pt[f]!=null){ inp.value = pt[f]; validarInput(inp); } });
+  })));
+  $('#editTxt').textContent = `Editando registro del ${fmtFecha(e.fecha)} · ${e.responsable}`;
+  $('#editBanner').classList.add('show');
+  $('#btnCancelar').textContent = 'Cancelar edición';
+  $('#btnRegistrar').textContent = 'Guardar cambios';
+  $('#btnRegWa').textContent = 'Guardar y enviar WhatsApp';
+  mostrarSemana(); actualizarConteo();
+  irA('registro');
+}
+function terminarEdicion(recargarBorrador){
+  EDIT = null;
+  $('#editBanner').classList.remove('show');
+  $('#btnCancelar').textContent = 'Cancelar';
+  $('#btnRegistrar').textContent = 'Registrar';
+  $('#btnRegWa').textContent = 'Registrar y enviar WhatsApp';
+  if(recargarBorrador){ vaciarFormulario(); cargarBorrador(); }
+}
+async function eliminarEnvio(e){
+  if(!window.confirm(`¿Eliminar el registro del ${fmtFecha(e.fecha)} (${e.responsable})?\nSe borrarán sus ${e.puntos.length} filas en Sheets. Esta acción no se puede deshacer.`)) return;
+  const res = await ejecutarOp({ accion:'eliminar', id:e.id });
+  if(DATA.raw) procesarDatos(DATA.raw);
+  actualizarPendientes(); prepararFiltros(); renderHistorial();
+  alert(res.estado==='cola' ? 'Sin conexión: la eliminación se aplicará en Sheets cuando vuelva la señal.' : 'Registro eliminado.');
+}
+
+function actualizarPendientes(){
+  const n = store.get(LS_PEND, []).length;
+  $('#pendBox').classList.toggle('show', n>0);
+  $('#pendTxt').textContent = `${n} operación(es) pendiente(s) de subir a Sheets.`;
+}
+async function reintentarPendientes(manual){
+  const pend = store.get(LS_PEND, []);
+  if(!pend.length || esDemo()) { if(manual && esDemo()) alert('Configura GAS_URL primero.'); return; }
+  const quedan = [];
+  for(const op of pend){ try{ await postGAS(op); }catch(e){ quedan.push(op); } }
+  store.set(LS_PEND, quedan);
+  if(quedan.length < pend.length) DATA.cargado = false;
+  actualizarPendientes();
+  if(manual) alert(quedan.length ? `Aún quedan ${quedan.length} pendientes.` : 'Todo se subió a Sheets.');
+}
+
+/* =====================================================================
+   DATOS (desde Sheets vía Apps Script)
+   ===================================================================== */
+const DATA = { cargado:false, raw:null, filas:[], envios:[], actualizado:null, fuente:'' };
+
+/* Código MSR-DDMMAA-0001 (en Sheets lo asigna Apps Script; aquí solo para modo demostración) */
+function codigoLocal(raw, iso){
+  const [y,m,d] = iso.split('-'), base = `MSR-${d}${m}${y.slice(-2)}-`;
+  let max = 0;
+  (raw?.envios||[]).forEach(e => { const c = String(e[4]||''); if(c.startsWith(base)) max = Math.max(max, parseInt(c.slice(base.length),10)||0); });
+  return base + String(max+1).padStart(4,'0');
+}
+/* Aplica una operación sobre el formato compacto del servidor */
+function aplicarOpRaw(raw, op){
+  if(!raw) return;
+  raw.registros = raw.registros.filter(r => r[0]!==op.id);
+  raw.envios = raw.envios.filter(e => e[0]!==op.id);
+  if(op.accion==='eliminar') return;
+  op.puntos.forEach(p => raw.registros.push([op.id, op.fecha, op.responsable, p.sector, p.parcela, p.cama, p.cm, p.ml??'', p.ph??'', p.ce??'']));
+  raw.envios.push([op.id, op.fecha, op.responsable, op.observaciones||'', op.codigo||'']);
+}
+
+function procesarDatos(rawServidor){
+  // registros: [id, fecha(yyyy-mm-dd), responsable, sector, parcela, cama, cm, ml, ph, ce]
+  // envios:    [id, fecha, responsable, observaciones]
+  const raw = { registros:[...(rawServidor.registros||[])], envios:[...(rawServidor.envios||[])] };
+  const pendIds = new Set();
+  store.get(LS_PEND, []).forEach(op => { aplicarOpRaw(raw, { accion:'guardar', ...op }); if(op.accion!=='eliminar') pendIds.add(op.id); });
+  const mapEnv = {};
+  raw.envios.forEach(e => mapEnv[e[0]] = { id:e[0], fecha:e[1], responsable:e[2], observaciones:e[3]||'', codigo:e[4]||'', puntos:[], pend:pendIds.has(e[0]) });
+  const filas = [];
+  const nz = v => (v===''||v==null) ? null : Number(v);
+  raw.registros.forEach(r => {
+    if(!r[1]) return;
+    const f = { id:r[0], fecha:r[1], responsable:r[2], sector:r[3], parcela:String(r[4]), cama:String(r[5]??''), cm:Number(r[6]),
+                ml:nz(r[7]), ph:nz(r[8]), ce:nz(r[9]), pend:pendIds.has(r[0]), ...infoFecha(r[1]) };
+    filas.push(f);
+    (mapEnv[f.id] ||= { id:f.id, fecha:f.fecha, responsable:f.responsable, observaciones:'', puntos:[], pend:f.pend }).puntos.push(f);
+  });
+  DATA.filas = filas;
+  DATA.envios = Object.values(mapEnv).filter(e=>e.puntos.length).map(e => ({ ...e, ...infoFecha(e.fecha) }))
+                 .sort((a,b) => b.fecha.localeCompare(a.fecha) || b.id.localeCompare(a.id));
+}
+
+async function cargarDatos(forzar){
+  $('#dataMeta').textContent = 'Cargando…'; $('#hMeta').textContent = 'Cargando…';
+  let raw = null;
+  if(esDemo()){
+    raw = (DATA.fuente==='demo' && DATA.raw) ? DATA.raw : datosDemo(); DATA.fuente = 'demo';
+  } else {
+    try{
+      const r = await fetch(CONFIG.GAS_URL + '?accion=datos&t=' + Date.now());
+      const j = await r.json();
+      if(!j.ok) throw new Error(j.error||'Error');
+      raw = { registros:j.registros, envios:j.envios }; DATA.fuente = 'sheets';
+      store.set(LS_CACHE, { raw, ts: Date.now() });
+    }catch(err){
+      const c = store.get(LS_CACHE, null);
+      if(c){ raw = c.raw; DATA.fuente = 'cache'; DATA.actualizado = new Date(c.ts); }
+      else { raw = {registros:[],envios:[]}; DATA.fuente = 'error'; }
+    }
+  }
+  if(DATA.fuente!=='cache') DATA.actualizado = new Date();
+  DATA.raw = raw;
+  procesarDatos(raw);
+  DATA.cargado = true;
+  $('#demoBanner').style.display = DATA.fuente==='demo' ? '' : 'none';
+  prepararFiltros();
+  const tab = document.querySelector('nav.tabs button.act').dataset.tab;
+  if(tab==='historial') renderHistorial(); else renderDashboard();
+}
+
+/* =====================================================================
+   FILTROS
+   ===================================================================== */
+const FILTRO_INI = { hecho:false };
+function opciones(sel, items, todas){
+  const prev = sel.value;
+  sel.innerHTML = (todas?`<option value="">${todas}</option>`:'') + items.map(([v,t])=>`<option value="${esc(v)}">${esc(t)}</option>`).join('');
+  if([...sel.options].some(o=>o.value===prev)) sel.value = prev;
+}
+function temporadasDisponibles(){
+  const set = new Set(DATA.filas.map(f=>f.temp));
+  set.add(infoFecha(hoyISO()).temp);
+  return [...set].sort().reverse();
+}
+function semanasDe(temp){
+  const m = new Map();
+  DATA.filas.filter(f=>!temp || f.temp===temp).forEach(f => m.set(f.key, f.sem));
+  return [...m.entries()].sort((a,b)=>a[0]-b[0]).map(([k,s]) => [String(k), `S${pad2(s)}` + (temp?'':` · ${String(k).slice(0,4)}`)]);
+}
+function prepararFiltros(){
+  const temps = temporadasDisponibles().map(t=>[t,t]);
+  opciones($('#fTemp'), temps, 'Todas'); opciones($('#hTemp'), temps, 'Todas');
+  if(!FILTRO_INI.hecho){ const t = infoFecha(hoyISO()).temp; $('#fTemp').value = t; $('#hTemp').value = t; FILTRO_INI.hecho = true; }
+  opciones($('#fSem'), semanasDe($('#fTemp').value), 'Todas');
+  opciones($('#hSem'), semanasDe($('#hTemp').value), 'Todas');
+  const secs = SECTORES.map(s=>[s.sector,s.sector]);
+  opciones($('#fSector'), secs, 'Todos'); opciones($('#hSector'), secs, 'Todos');
+}
+['fTemp','fSem','fDesde','fHasta','fSector'].forEach(id => $('#'+id).addEventListener('change', () => {
+  if(id==='fTemp') opciones($('#fSem'), semanasDe($('#fTemp').value), 'Todas');
+  renderDashboard();
+}));
+['hTemp','hSem','hDesde','hHasta','hSector'].forEach(id => $('#'+id).addEventListener('change', () => {
+  if(id==='hTemp') opciones($('#hSem'), semanasDe($('#hTemp').value), 'Todas');
+  renderHistorial();
+}));
+function limpiarFiltros(){
+  $('#fTemp').value = infoFecha(hoyISO()).temp; opciones($('#fSem'), semanasDe($('#fTemp').value), 'Todas');
+  ['fSem','fDesde','fHasta','fSector'].forEach(id => $('#'+id).value='');
+  renderDashboard();
+}
+function filasFiltradas(){
+  const t=$('#fTemp').value, s=$('#fSem').value, d=$('#fDesde').value, h=$('#fHasta').value, sec=$('#fSector').value;
+  return DATA.filas.filter(f => (!t||f.temp===t) && (!s||String(f.key)===s) && (!d||f.fecha>=d) && (!h||f.fecha<=h)
+                             && (!sec||f.sector===sec) && tieneDato(f));
+}
+
+/* =====================================================================
+   DASHBOARD
+   ===================================================================== */
+let METRICA = 'ph';
+const MET = { ph:{n:'pH', u:''}, ce:{n:'CE', u:' dS/m'}, ml:{n:'Volumen', u:' ml'} };
+const COLOR_PROF = { 10:'#eda100', 15:'#2a78d6', 20:'#eb6834', 40:'#1baf7a' };
+$$('#metricChips button').forEach(b => b.addEventListener('click', () => {
+  METRICA = b.dataset.m; $$('#metricChips button').forEach(x=>x.classList.toggle('act', x===b)); renderDashboard();
+}));
+const charts = {};
+if(window.Chart){
+  Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+  Chart.defaults.color = '#667085';
+  Chart.defaults.borderColor = '#edf0f5';
+}
+
+function renderDashboard(){
+  if(!DATA.cargado) return;
+  const F = filasFiltradas(), m = METRICA;
+  const fuenteTxt = { demo:'Datos de demostración', sheets:'Sheets', cache:'Sin conexión: datos guardados', error:'No se pudo cargar' }[DATA.fuente];
+  $('#dataMeta').textContent = `${fuenteTxt} · ${DATA.actualizado ? DATA.actualizado.toLocaleString('es-PE',{dateStyle:'short',timeStyle:'short'}) : ''}`;
+
+  /* KPIs */
+  const envIds = new Set(F.map(f=>f.id)), nFuera = F.filter(filaFuera).length;
+  const pctF = F.length ? nFuera/F.length*100 : null;
+  const pPh = prom(F.map(f=>f.ph)), pCe = prom(F.map(f=>f.ce)), pMl = prom(F.map(f=>f.ml));
+  const kpi = (l,v,s,bad) => `<div class="kpi"><div class="l">${l}</div><div class="v ${bad?'bad':''}">${v}</div><div class="s">${s}</div></div>`;
+  $('#kpis').innerHTML =
+    kpi('Muestreos', envIds.size, `${new Set(F.map(f=>f.key)).size} semana(s)`) +
+    kpi('Puntos medidos', F.length, 'con al menos un dato') +
+    kpi('pH promedio', r2(pPh), `ref. ${CONFIG.PH_MIN}–${CONFIG.PH_MAX}`, fueraRango('ph',pPh)) +
+    kpi('CE promedio', r2(pCe), `dS/m · ref. ≤ ${CONFIG.CE_MAX}`, fueraRango('ce',pCe)) +
+    kpi('Volumen promedio', r2(pMl), 'ml por sonda') +
+    kpi('Fuera de rango', pctF==null?'–':Math.round(pctF)+'%', `${nFuera} punto(s)`, pctF>0);
+
+  const titulo = `${MET[m].n}${MET[m].u ? ' ('+MET[m].u.trim()+')' : ''}`;
+  $('#tTrend').textContent = `Tendencia semanal · ${titulo}`;
+  $('#tSector').textContent = `Promedio por sector · ${titulo}`;
+  $('#tMatriz').textContent = `Parcela × profundidad · ${titulo}`;
+
+  /* Tendencia semanal por profundidad */
+  const semanas = [...new Set(F.map(f=>f.key))].sort((a,b)=>a-b);
+  const labels = semanas.map(k => 'S'+pad2(k%100));
+  const profs = [...new Set(F.map(f=>f.cm))].sort((a,b)=>a-b);
+  const ds = profs.map(cm => ({
+    label: cm+' cm', borderColor: COLOR_PROF[cm]||'#4a3aa7', backgroundColor: COLOR_PROF[cm]||'#4a3aa7',
+    data: semanas.map(k => { const v = prom(F.filter(f=>f.key===k && f.cm===cm).map(f=>f[m])); return v==null?null:Math.round(v*100)/100; }),
+    borderWidth:2, pointRadius:4, pointHoverRadius:6, tension:.25, spanGaps:true
+  }));
+  const lim = v => ({ label:'Límite', data: semanas.map(()=>v), borderColor:'#8a8984', borderDash:[5,4], borderWidth:1.5, pointRadius:0, pointHoverRadius:0 });
+  if(m==='ph'){ ds.push(lim(CONFIG.PH_MIN)); ds.push({...lim(CONFIG.PH_MAX), label:'Límite '}); }
+  if(m==='ce') ds.push(lim(CONFIG.CE_MAX));
+  dibujar('chTrend', 'line', labels, ds, {
+    plugins:{ legend:{ labels:{ usePointStyle:true, boxWidth:8, boxHeight:8, filter:i=>i.text!=='Límite ' } },
+              tooltip:{ mode:'index', intersect:false, filter:i=>!i.dataset.label.startsWith('Límite') } },
+    interaction:{ mode:'index', intersect:false },
+    scales:{ y:{ grace:'10%' }, x:{ grid:{display:false} } }
+  }, semanas.length===0);
+
+  /* Barras por sector */
+  const secs = SECTORES.map(s=>s.sector).filter(s => F.some(f=>f.sector===s));
+  const vals = secs.map(s => { const v=prom(F.filter(f=>f.sector===s).map(f=>f[m])); return v==null?null:Math.round(v*100)/100; });
+  dibujar('chSector', 'bar', secs, [{
+    label: MET[m].n, data: vals, backgroundColor:'#2a78d6', borderRadius:4, borderSkipped:'start', maxBarThickness:36
+  }], {
+    plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:c=>`${MET[m].n}: ${c.parsed.y}${MET[m].u}` } } },
+    scales:{ y:{ beginAtZero:true, grace:'10%' }, x:{ grid:{display:false} } }
+  }, secs.length===0);
+
+  /* Matriz parcela × profundidad */
+  const profCols = [...new Set(PUNTOS.map(p=>p.cm))].sort((a,b)=>a-b);
+  let html = `<table class="t"><thead><tr><th>Sector</th><th>Parcela</th><th>Cama</th>${profCols.map(c=>`<th class="n">${c} cm</th>`).join('')}</tr></thead><tbody>`;
+  let filasHtml = 0;
+  SECTORES.filter(s=>!$('#fSector').value || s.sector===$('#fSector').value).forEach(s => {
+    s.parcelas.forEach((p,i) => {
+      html += `<tr><td class="sec">${i===0?s.sector:''}</td><td>${esc(p.parcela)}</td><td>${esc(p.cama)||'–'}</td>`;
+      profCols.forEach(cm => {
+        if(!p.prof.includes(cm)){ html += `<td class="n c-na">·</td>`; return; }
+        const v = prom(F.filter(f=>f.sector===s.sector && f.parcela===p.parcela && f.cama===p.cama && f.cm===cm).map(f=>f[m]));
+        if(v==null){ html += `<td class="n c-na">–</td>`; return; }
+        const bad = fueraRango(m, v);
+        html += `<td class="n ${bad?'c-bad':'c-ok'}" title="${bad?'Fuera de rango':'Dentro de rango'}">${bad?'! ':'✓ '}${r2(v)}</td>`;
+      });
+      html += '</tr>'; filasHtml++;
+    });
+  });
+  html += '</tbody></table>';
+  $('#matriz').innerHTML = F.length ? html : '<div class="vacio">Sin datos para los filtros seleccionados.</div>';
+
+  /* Alertas */
+  const al = alertasDe(F).sort((a,b)=>b.p.fecha.localeCompare(a.p.fecha));
+  $('#alertSub').textContent = al.length ? `${al.length} alerta(s), más recientes primero` : '';
+  $('#alertas').innerHTML = al.length
+    ? al.slice(0,100).map(a => `<li><b>!</b><span>${esc(a.t)}</span><span class="when">${fmtFecha(a.p.fecha)}</span></li>`).join('')
+    : '<li class="vacio" style="display:block">Sin alertas en el periodo ✓</li>';
+}
+
+function dibujar(id, type, labels, datasets, extra, vacio){
+  if(!window.Chart){
+    const c = document.getElementById(id);
+    if(c) c.parentElement.innerHTML = '<div class="vacio">No se pudo cargar la librería de gráficos (revisa la conexión a internet).</div>';
+    return;
+  }
+  if(charts[id]) charts[id].destroy();
+  const cv = document.getElementById(id);
+  charts[id] = new Chart(cv, { type, data:{ labels, datasets }, options:{ responsive:true, maintainAspectRatio:false, animation:{duration:250}, ...extra } });
+  cv.style.opacity = vacio ? .25 : 1;
+}
+
+/* =====================================================================
+   HISTORIAL
+   ===================================================================== */
+function enviosFiltrados(){
+  const t=$('#hTemp').value, s=$('#hSem').value, d=$('#hDesde').value, h=$('#hHasta').value;
+  return DATA.envios.filter(e => (!t||e.temp===t) && (!s||String(e.key)===s) && (!d||e.fecha>=d) && (!h||e.fecha<=h));
+}
+function renderHistorial(){
+  if(!DATA.cargado) return;
+  const lista = enviosFiltrados(), sec = $('#hSector').value;
+  $('#hMeta').textContent = `${lista.length} registro(s)` + (DATA.fuente==='demo' ? ' · datos de demostración' : DATA.fuente==='cache' ? ' · sin conexión (datos guardados)' : '');
+  if(!lista.length){ $('#hLista').innerHTML = '<div class="card vacio">No hay registros para los filtros seleccionados.</div>'; return; }
+  $('#hLista').innerHTML = lista.map((e,idx) => {
+    const P = e.puntos.filter(tieneDato), nAl = alertasDe(e.puntos).length;
+    const det = e.puntos.filter(p=>!sec || p.sector===sec);
+    return `<details class="hitem" data-i="${idx}">
+      <summary>
+        <span class="fch">${fmtFecha(e.fecha)}</span>
+        <span class="who"><b>${esc(e.codigo||'Sin código')}</b> · S${pad2(e.sem)} · ${e.temp} · ${esc(e.responsable)} ${e.pend?'<span class="tag pend">Pendiente de subir</span>':''}</span>
+        <span class="badge ${nAl?'bad':'ok'}">${nAl?`! ${nAl} alerta(s)`:'✓ OK'}</span>
+        <span class="vals">${P.length}/${e.puntos.length} puntos · pH ${r2(prom(P.map(p=>p.ph)))} · CE ${r2(prom(P.map(p=>p.ce)))} · ml ${r2(prom(P.map(p=>p.ml)))}</span>
+      </summary>
+      <div class="hbody">
+        <div class="hacc">
+          <button class="btn btn-sm" onclick="accionHist('${esc(e.id)}','editar')">✏️ Editar</button>
+          <button class="btn-del btn-sm" onclick="accionHist('${esc(e.id)}','eliminar')">🗑 Eliminar</button>
+          <button class="btn-pdf btn-sm" onclick="accionHist('${esc(e.id)}','pdf',this)">📄 PDF</button>
+          <button class="btn-wa-sm btn-sm" onclick="accionHist('${esc(e.id)}','wa')">Reenviar WhatsApp</button>
+        </div>
+        ${e.observaciones?`<div class="obs">📝 ${esc(e.observaciones)}</div>`:''}
+        <div class="tbl-wrap" style="margin-top:10px"><table class="t">
+          <thead><tr><th>Sector</th><th>Parcela</th><th>Cama</th><th class="n">cm</th><th class="n">ml</th><th class="n">pH</th><th class="n">CE</th></tr></thead>
+          <tbody>${det.map(p => `<tr><td class="sec">${p.sector}</td><td>${esc(p.parcela)}</td><td>${esc(p.cama)||'–'}</td><td class="n">${p.cm}</td>
+            <td class="n ${p.ml!=null&&p.ml<CONFIG.ML_MIN?'c-bad':''}">${r2(p.ml)}</td>
+            <td class="n ${fueraRango('ph',p.ph)?'c-bad':''}">${r2(p.ph)}</td>
+            <td class="n ${fueraRango('ce',p.ce)?'c-bad':''}">${r2(p.ce)}</td></tr>`).join('')}</tbody>
+        </table></div>
+
+      </div>
+    </details>`;
+  }).join('');
+}
+function regDesdeEnvio(e){
+  return { id:e.id, codigo:e.codigo, fecha:e.fecha, responsable:e.responsable, observaciones:e.observaciones,
+           puntos: e.puntos.map(p=>({ sector:p.sector, parcela:p.parcela, cama:p.cama, cm:p.cm, ml:p.ml, ph:p.ph, ce:p.ce })) };
+}
+function accionHist(id, acc, btn){
+  const e = DATA.envios.find(x => x.id===id); if(!e) return;
+  if(acc==='pdf') return descargarPDF(e, btn);
+  if(acc==='editar') return editarEnvio(e);
+  if(acc==='eliminar') return eliminarEnvio(e);
+  const reg = regDesdeEnvio(e);
+  if(acc==='wa') abrirWhatsApp(reg); else copiarResumen(reg);
+}
+function exportarCSV(){
+  const lista = enviosFiltrados(), sec = $('#hSector').value;
+  const rows = [['Código','Fecha','Semana','Temporada','Responsable','Sector','Parcela','Cama','Profundidad_cm','ml','pH','CE']];
+  lista.forEach(e => e.puntos.filter(p=>!sec||p.sector===sec).forEach(p =>
+    rows.push([e.codigo||'', fmtFecha(e.fecha), e.sem, e.temp, e.responsable, p.sector, p.parcela, p.cama, p.cm, p.ml??'', p.ph??'', p.ce??''])));
+  const csv = '﻿' + rows.map(r => r.map(v => { v=String(v); return /[;"\n]/.test(v) ? `"${v.replace(/"/g,'""')}"` : v; }).join(';')).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv;charset=utf-8'}));
+  a.download = `sondas_${$('#hTemp').value||'todas'}${$('#hSem').value?'_S'+$('#hSem').value.slice(-2):''}.csv`;
+  a.click(); setTimeout(()=>URL.revokeObjectURL(a.href), 2000);
+}
+
+/* =====================================================================
+   REPORTE PDF (historial)
+   ===================================================================== */
+const PDF_LIBS = [
+  ['https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
+   'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js'],
+  ['https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js',
+   'https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js']
+];
+function cargarScript(src){
+  return new Promise((ok, no) => { const s=document.createElement('script'); s.src=src; s.onload=ok; s.onerror=()=>{ s.remove(); no(new Error(src)); }; document.head.appendChild(s); });
+}
+async function cargarLibPDF(){
+  if(window.jspdf && window.jspdf.jsPDF && window.jspdf.jsPDF.API.autoTable) return;
+  for(const urls of PDF_LIBS){
+    let hecho = false;
+    for(const u of urls){ try{ await cargarScript(u); hecho = true; break; }catch(e){} }
+    if(!hecho) throw new Error('No se pudo cargar la librería PDF (revisa la conexión a internet).');
+  }
+}
+
+async function descargarPDF(e, btn){
+  const txt = btn ? btn.textContent : '';
+  if(btn){ btn.disabled = true; btn.textContent = 'Generando…'; }
+  try{ await cargarLibPDF(); generarPDF(e); }
+  catch(err){ alert(err.message); }
+  finally{ if(btn){ btn.disabled = false; btn.textContent = txt; } }
+}
+
+function generarPDF(e){
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit:'mm', format:'a4' });
+  const W = 210, H = 297, M = 14, CW = W - 2*M;
+  const C = { azul:[18,58,122], azul2:[30,91,184], txt:[27,37,51], muted:[102,112,133],
+              borde:[214,221,232], err:[180,35,24], errBg:[253,236,234], zebra:[247,249,252] };
+  const f2 = n => n==null ? '-' : Number(n).toFixed(2);
+  const P = e.puntos, conDato = P.filter(tieneDato);
+  const ahora = new Date();
+  const genTxt = `${pad2(ahora.getDate())}/${pad2(ahora.getMonth()+1)}/${ahora.getFullYear()} ${pad2(ahora.getHours())}:${pad2(ahora.getMinutes())}`;
+
+  /* ---------- Encabezado ---------- */
+  doc.setFillColor(...C.azul); doc.rect(0, 0, W, 24, 'F');
+  doc.setFillColor(...C.azul2); doc.rect(0, 24, W, 1, 'F');
+  doc.setTextColor(255); doc.setFont('helvetica','bold'); doc.setFontSize(16);
+  doc.text('MUESTREO DE SONDAS', M, 11.5);
+  doc.setFont('helvetica','normal'); doc.setFontSize(9);
+  doc.text('Riego  ·  HFE Berries Olmos', M, 18);
+  doc.setFont('helvetica','bold'); doc.setFontSize(15);
+  doc.text(fmtFecha(e.fecha), W-M, 11.5, { align:'right' });
+  doc.setFont('helvetica','normal'); doc.setFontSize(9);
+  doc.text(`Semana ${e.sem}  ·  Temporada ${e.temp}`, W-M, 18, { align:'right' });
+
+  /* ---------- Datos generales ---------- */
+  let y = 32;
+  const info = [['RESPONSABLE', e.responsable || '-'], ['PUNTOS REGISTRADOS', `${conDato.length} de ${P.length}`],
+                ['CÓDIGO DE REGISTRO', e.codigo || 'Pendiente de asignar']];
+  info.forEach((it, i) => {
+    const x = M + i * (CW/3);
+    doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(...C.muted); doc.text(it[0], x, y);
+    doc.setFont('helvetica', i===2 ? 'bold' : 'normal'); doc.setFontSize(10); doc.setTextColor(...(i===2 ? C.azul : C.txt));
+    doc.text(String(it[1]), x, y+5);
+  });
+  y += 12;
+
+  /* ---------- Título de sección ---------- */
+  const titulo = (t, yy) => {
+    doc.setFillColor(...C.azul); doc.rect(M, yy-3.4, 1.3, 4.5, 'F');
+    doc.setFont('helvetica','bold'); doc.setFontSize(10.5); doc.setTextColor(...C.azul); doc.text(t, M+3.2, yy);
+  };
+  titulo('Detalle por punto de muestreo', y);
+  y += 3;
+
+  /* ---------- Zona inferior fija: observaciones + firmas + pie ---------- */
+  const yFirma = H - 26;                 // línea de firma
+  const obsH = 13;
+  const yObs = yFirma - 22 - obsH;       // recuadro de observaciones (deja ~22 mm para firmar)
+  const yTablaFin = yObs - 10;           // fin de la tabla (incluye título "Observaciones")
+
+  /* ---------- Tabla: altura de fila repartida para llenar el espacio ---------- */
+  const body = [], meta = [];
+  SECTORES.forEach(s => {
+    const nSec = P.filter(p=>p.sector===s.sector).length;
+    let primero = true;
+    s.parcelas.forEach(pa => {
+      const ps = P.filter(p => p.sector===s.sector && String(p.parcela)===pa.parcela && String(p.cama||'')===pa.cama);
+      ps.forEach((p, i) => {
+        const fila = [];
+        if(primero){ fila.push({ content:s.sector, rowSpan:nSec }); primero = false; }
+        if(i===0){ fila.push({ content:pa.parcela, rowSpan:ps.length }); fila.push({ content:pa.cama || '-', rowSpan:ps.length }); }
+        fila.push(String(p.cm), p.ml==null?'-':r2(p.ml), f2(p.ph), f2(p.ce));
+        body.push(fila); meta.push(p);
+      });
+    });
+  });
+  const headH = 6.5;
+  const alto = Math.min(5.5, (yTablaFin - y - headH) / body.length);
+  const fs = alto < 3.8 ? 7.2 : 8;
+  doc.autoTable({
+    startY:y, theme:'grid', margin:{ left:M, right:M, top:10, bottom:8 }, pageBreak:'avoid',
+    head:[['Sector','Parcela','Cama','Cm','Volumen (ml)','pH','CE (dS/m)']],
+    body,
+    styles:{ font:'helvetica', fontSize:fs, cellPadding:{top:0.2,bottom:0.2,left:1.5,right:1.5}, minCellHeight:alto,
+             halign:'center', valign:'middle', textColor:C.txt, lineColor:C.borde, lineWidth:0.2 },
+    headStyles:{ fillColor:C.azul, textColor:255, fontStyle:'bold', fontSize:8.2, minCellHeight:headH },
+    alternateRowStyles:{ fillColor:C.zebra },
+    // columnas repartidas en todo el ancho (182 mm)
+    columnStyles:{ 0:{cellWidth:24, fontStyle:'bold', textColor:C.azul, fillColor:[255,255,255], fontSize:9.5},
+                   1:{cellWidth:40, fillColor:[255,255,255]}, 2:{cellWidth:24, fillColor:[255,255,255]},
+                   3:{cellWidth:18}, 4:{cellWidth:26}, 5:{cellWidth:25}, 6:{cellWidth:25} },
+    didParseCell: d => {
+      if(d.section!=='body') return;
+      const p = meta[d.row.index], c = d.column.index;
+      const bad = (c===4 && p.ml!=null && p.ml<CONFIG.ML_MIN) || (c===5 && fueraRango('ph', p.ph)) || (c===6 && fueraRango('ce', p.ce));
+      if(bad){ d.cell.styles.fillColor = C.errBg; d.cell.styles.textColor = C.err; d.cell.styles.fontStyle = 'bold'; }
+    },
+    didDrawCell: d => {   // separador más marcado entre sectores
+      if(d.section==='body' && d.column.index===0 && d.cell.raw && d.cell.raw.rowSpan){
+        doc.setDrawColor(...C.azul); doc.setLineWidth(0.45); doc.line(M, d.cell.y, W-M, d.cell.y);
+      }
+    }
+  });
+
+  /* ---------- Observaciones ---------- */
+  titulo('Observaciones', yObs - 3);
+  doc.setFont('helvetica','normal'); doc.setFontSize(8.5);
+  const obs = doc.splitTextToSize(e.observaciones || 'Sin observaciones.', CW - 8).slice(0, 2);
+  doc.setDrawColor(...C.borde); doc.setFillColor(...C.zebra); doc.setLineWidth(0.25); doc.roundedRect(M, yObs, CW, obsH, 1.8, 1.8, 'FD');
+  doc.setFont('helvetica', e.observaciones ? 'normal' : 'italic'); doc.setTextColor(...(e.observaciones ? C.txt : C.muted));
+  doc.text(obs, M+4, yObs+5.2);
+
+  /* ---------- Firmas ---------- */
+  const fw = 68;
+  [[M+8, 'Responsable del muestreo', e.responsable || ''], [W-M-8-fw, 'V° B° Supervisor de Riego', '']].forEach(([x, lbl, nom]) => {
+    doc.setDrawColor(...C.muted); doc.setLineWidth(0.3); doc.line(x, yFirma, x+fw, yFirma);
+    doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(...C.txt); doc.text(lbl, x+fw/2, yFirma+4.5, { align:'center' });
+    if(nom){ doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(...C.muted); doc.text(nom, x+fw/2, yFirma+8.5, { align:'center' }); }
+  });
+
+  /* ---------- Pie ---------- */
+  doc.setDrawColor(...C.borde); doc.setLineWidth(0.3); doc.line(M, H-10, W-M, H-10);
+  doc.setFont('helvetica','normal'); doc.setFontSize(6.8); doc.setTextColor(...C.muted);
+  doc.text(`Valores en rojo fuera de referencia: pH ${CONFIG.PH_MIN} - ${CONFIG.PH_MAX}  ·  CE <= ${CONFIG.CE_MAX} dS/m  ·  Volumen < ${CONFIG.ML_MIN} ml = sin muestra`, M, H-6);
+  doc.text(`Generado: ${genTxt}`, W-M, H-6, { align:'right' });
+
+  doc.save(`Reporte_${e.codigo || ('Muestreo_Sondas_' + e.fecha)}.pdf`);
+  return doc;
+}
+
+/* =====================================================================
+   Datos de demostración (solo si GAS_URL no está configurada)
+   ===================================================================== */
+function datosDemo(){
+  let seed = 7; const rnd = () => (seed = (seed*16807) % 2147483647) / 2147483647;
+  const registros = [], envios = [];
+  const hoy = new Date(); hoy.setHours(12);
+  for(let d=84; d>=0; d-=3){
+    const dt = new Date(hoy); dt.setDate(dt.getDate()-d);
+    const iso = `${dt.getFullYear()}-${pad2(dt.getMonth()+1)}-${pad2(dt.getDate())}`;
+    const id = 'DEMO'+d, resp = ['Juan Pérez','María Quispe','Carlos Ramos'][d%3];
+    envios.push([id, iso, resp, d%12===0 ? 'Sonda O2E2 4.1 sin muestra' : '', `MSR-${pad2(dt.getDate())}${pad2(dt.getMonth()+1)}${String(dt.getFullYear()).slice(-2)}-0001`]);
+    PUNTOS.forEach(p => {
+      const base = { O1E1:5.1, O1E2:5.3, O2E1:5.0, O2E2:5.6, O3E1:5.4, O3E2:4.9, JV:5.2 }[p.sector];
+      const ph = +(base + (p.cm/100) + (rnd()-.5)*0.9 + (d<20?0.25:0)).toFixed(2);
+      const ce = +(0.6 + p.cm/120 + rnd()*0.5 + (p.sector==='O2E2'?0.3:0)).toFixed(2);
+      const ml = rnd()<0.04 ? 0 : Math.round(60 + rnd()*120 - p.cm);
+      registros.push([id, iso, resp, p.sector, p.parcela, p.cama, p.cm, ml, ph, ce]);
+    });
+  }
+  return { registros, envios };
+}
+
+/* Init */
+renderFormulario();
+cargarBorrador();
+actualizarPendientes();
+reintentarPendientes(false);
+window.addEventListener('online', () => reintentarPendientes(false));
+</script>
+</body>
+</html>
