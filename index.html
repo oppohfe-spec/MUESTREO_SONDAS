@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#123a7a">
 <title>Muestreo de Sondas · Riego</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link rel="preconnect" href="https://script.google.com" crossorigin>
+<link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
 <style>
   :root{
     color-scheme: light;
@@ -131,6 +132,7 @@
   .charts>*,.filtros>*,.kpis>*{min-width:0}
   .filtros input,.filtros select{min-width:0;max-width:100%}
   .chart-box{position:relative;height:280px}
+  .chart-msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.85)}
   .sub{font-size:12px;color:var(--muted);margin:-6px 0 10px}
   .tbl-wrap{overflow-x:auto}
   table.t{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
@@ -381,7 +383,16 @@ const store = {
   del(k){ try{ localStorage.removeItem(k); }catch(e){} }
 };
 const pad2 = n => String(n).padStart(2,'0');
-const hoyISO = () => { const d=new Date(); return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`; };
+/* Fecha y hora siempre en horario de Perú (America/Lima), aunque el celular tenga otra zona horaria */
+const ZONA = 'America/Lima';
+function partesLima(d = new Date()){
+  const o = {};
+  new Intl.DateTimeFormat('en-GB', { timeZone:ZONA, year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', hourCycle:'h23' })
+    .formatToParts(d).forEach(p => o[p.type] = p.value);
+  return o;   // {year, month, day, hour, minute}
+}
+const hoyISO = () => { const p = partesLima(); return `${p.year}-${p.month}-${p.day}`; };
+const ahoraLimaTxt = () => { const p = partesLima(); return `${p.day}/${p.month}/${p.year} ${p.hour}:${p.minute}`; };
 const fmtFecha = iso => { if(!iso) return ''; const [y,m,d]=iso.split('-'); return `${d}/${m}/${y}`; };
 const num = v => { if(v===''||v==null) return null; const n=parseFloat(String(v).replace(',','.')); return isNaN(n)?null:n; };
 const r2 = n => n==null ? '–' : (Math.round(n*100)/100).toString();
@@ -793,32 +804,66 @@ function procesarDatos(rawServidor){
                  .sort((a,b) => b.fecha.localeCompare(a.fecha) || b.id.localeCompare(a.id));
 }
 
-async function cargarDatos(forzar){
-  $('#dataMeta').textContent = 'Cargando…'; $('#hMeta').textContent = 'Cargando…';
-  let raw = null;
-  if(esDemo()){
-    raw = (DATA.fuente==='demo' && DATA.raw) ? DATA.raw : datosDemo(); DATA.fuente = 'demo';
-  } else {
+/* Carga de datos: muestra al instante lo guardado en el celular y actualiza desde Sheets en segundo plano */
+let CARGANDO = null;
+function aplicarRaw(raw, fuente, ts){
+  DATA.raw = raw; DATA.fuente = fuente; DATA.actualizado = ts;
+  procesarDatos(raw);
+  DATA.cargado = true;
+  $('#demoBanner').style.display = fuente==='demo' ? '' : 'none';
+  prepararFiltros();
+  const tab = document.querySelector('nav.tabs button.act').dataset.tab;
+  if(tab==='historial') renderHistorial(); else if(tab==='dashboard') renderDashboard();
+}
+function cargarDatos(forzar){
+  if(CARGANDO) return CARGANDO;                      // evita consultas duplicadas
+  CARGANDO = (async () => {
+    if(esDemo()){
+      aplicarRaw((DATA.fuente==='demo' && DATA.raw) ? DATA.raw : datosDemo(), 'demo', new Date()); return;
+    }
+    const c = store.get(LS_CACHE, null);
+    if(c && !DATA.cargado) aplicarRaw(c.raw, 'cache', new Date(c.ts));   // apertura instantánea
+    $('#dataMeta').textContent = DATA.cargado ? 'Actualizando…' : 'Cargando…';
+    $('#hMeta').textContent = DATA.cargado ? 'Actualizando…' : 'Cargando…';
     try{
       const r = await fetch(CONFIG.GAS_URL + '?accion=datos&t=' + Date.now());
       const j = await r.json();
       if(!j.ok) throw new Error(j.error||'Error');
-      raw = { registros:j.registros, envios:j.envios }; DATA.fuente = 'sheets';
+      const raw = { registros:j.registros, envios:j.envios };
+      const igual = c && JSON.stringify(c.raw) === JSON.stringify(raw) && DATA.cargado;
       store.set(LS_CACHE, { raw, ts: Date.now() });
+      if(igual){ DATA.fuente = 'sheets'; DATA.actualizado = new Date(); actualizarMeta(); }   // sin cambios: no se redibuja
+      else aplicarRaw(raw, 'sheets', new Date());
     }catch(err){
-      const c = store.get(LS_CACHE, null);
-      if(c){ raw = c.raw; DATA.fuente = 'cache'; DATA.actualizado = new Date(c.ts); }
-      else { raw = {registros:[],envios:[]}; DATA.fuente = 'error'; }
+      if(!DATA.cargado) aplicarRaw(c ? c.raw : {registros:[],envios:[]}, c ? 'cache' : 'error', c ? new Date(c.ts) : new Date());
+      else { DATA.fuente = 'cache'; actualizarMeta(); }
     }
+  })().finally(() => { CARGANDO = null; });
+  return CARGANDO;
+}
+function actualizarMeta(){
+  const fuenteTxt = { demo:'Datos de demostración', sheets:'Sheets', cache:'Sin conexión: datos guardados', error:'No se pudo cargar' }[DATA.fuente];
+  const cuando = DATA.actualizado ? DATA.actualizado.toLocaleString('es-PE',{ timeZone:'America/Lima', dateStyle:'short', timeStyle:'short' }) : '';
+  $('#dataMeta').textContent = `${fuenteTxt} · ${cuando}`;
+  if(DATA.cargado) $('#hMeta').textContent = `${enviosFiltrados().length} registro(s)` + (DATA.fuente==='demo' ? ' · datos de demostración' : DATA.fuente==='cache' ? ' · sin conexión (datos guardados)' : '');
+}
+
+/* Chart.js se descarga solo al abrir el Dashboard (la pestaña Registro abre más rápido) */
+let CHART_CARGA = null;
+function cargarChart(){
+  if(window.Chart) return Promise.resolve();
+  if(!CHART_CARGA){
+    CHART_CARGA = (async () => {
+      for(const u of ['https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js','https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js']){
+        try{ await cargarScript(u); break; }catch(e){}
+      }
+      if(!window.Chart) throw new Error('sin Chart');
+      Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+      Chart.defaults.color = '#667085';
+      Chart.defaults.borderColor = '#edf0f5';
+    })().catch(e => { CHART_CARGA = null; throw e; });
   }
-  if(DATA.fuente!=='cache') DATA.actualizado = new Date();
-  DATA.raw = raw;
-  procesarDatos(raw);
-  DATA.cargado = true;
-  $('#demoBanner').style.display = DATA.fuente==='demo' ? '' : 'none';
-  prepararFiltros();
-  const tab = document.querySelector('nav.tabs button.act').dataset.tab;
-  if(tab==='historial') renderHistorial(); else renderDashboard();
+  return CHART_CARGA;
 }
 
 /* =====================================================================
@@ -878,17 +923,13 @@ $$('#metricChips button').forEach(b => b.addEventListener('click', () => {
   METRICA = b.dataset.m; $$('#metricChips button').forEach(x=>x.classList.toggle('act', x===b)); renderDashboard();
 }));
 const charts = {};
-if(window.Chart){
-  Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
-  Chart.defaults.color = '#667085';
-  Chart.defaults.borderColor = '#edf0f5';
-}
 
 function renderDashboard(){
   if(!DATA.cargado) return;
+  if(!window.Chart) cargarChart().then(() => { if(document.querySelector('nav.tabs button.act').dataset.tab==='dashboard') renderDashboard(); }).catch(()=>{});
   const F = filasFiltradas(), m = METRICA;
   const fuenteTxt = { demo:'Datos de demostración', sheets:'Sheets', cache:'Sin conexión: datos guardados', error:'No se pudo cargar' }[DATA.fuente];
-  $('#dataMeta').textContent = `${fuenteTxt} · ${DATA.actualizado ? DATA.actualizado.toLocaleString('es-PE',{dateStyle:'short',timeStyle:'short'}) : ''}`;
+  $('#dataMeta').textContent = `${fuenteTxt} · ${DATA.actualizado ? DATA.actualizado.toLocaleString('es-PE',{timeZone:'America/Lima',dateStyle:'short',timeStyle:'short'}) : ''}`;
 
   /* KPIs */
   const envIds = new Set(F.map(f=>f.id)), nFuera = F.filter(filaFuera).length;
@@ -966,13 +1007,16 @@ function renderDashboard(){
 }
 
 function dibujar(id, type, labels, datasets, extra, vacio){
+  const cv = document.getElementById(id);
+  const box = cv.parentElement;
+  let msg = box.querySelector('.chart-msg');
   if(!window.Chart){
-    const c = document.getElementById(id);
-    if(c) c.parentElement.innerHTML = '<div class="vacio">No se pudo cargar la librería de gráficos (revisa la conexión a internet).</div>';
+    if(!msg){ msg = document.createElement('div'); msg.className = 'chart-msg vacio'; box.appendChild(msg); }
+    msg.textContent = CHART_CARGA ? 'Cargando gráficos…' : 'No se pudieron cargar los gráficos (revisa la conexión a internet).';
     return;
   }
+  if(msg) msg.remove();
   if(charts[id]) charts[id].destroy();
-  const cv = document.getElementById(id);
   charts[id] = new Chart(cv, { type, data:{ labels, datasets }, options:{ responsive:true, maintainAspectRatio:false, animation:{duration:250}, ...extra } });
   cv.style.opacity = vacio ? .25 : 1;
 }
@@ -1081,7 +1125,7 @@ function generarPDF(e){
   const f2 = n => n==null ? '-' : Number(n).toFixed(2);
   const P = e.puntos, conDato = P.filter(tieneDato);
   const ahora = new Date();
-  const genTxt = `${pad2(ahora.getDate())}/${pad2(ahora.getMonth()+1)}/${ahora.getFullYear()} ${pad2(ahora.getHours())}:${pad2(ahora.getMinutes())}`;
+  const genTxt = ahoraLimaTxt() + ' (hora Perú)';
 
   /* ---------- Encabezado ---------- */
   doc.setFillColor(...C.azul); doc.rect(0, 0, W, 24, 'F');
@@ -1220,6 +1264,12 @@ cargarBorrador();
 actualizarPendientes();
 reintentarPendientes(false);
 window.addEventListener('online', () => reintentarPendientes(false));
+// Precarga en segundo plano: Dashboard e Historial abren al instante
+setTimeout(() => { if(!DATA.cargado) cargarDatos(false); }, 1200);
+// Caché de la app (sw.js): abre rápido y funciona sin señal
+if('serviceWorker' in navigator && location.protocol === 'https:'){
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(()=>{}));
+}
 </script>
 </body>
 </html>
